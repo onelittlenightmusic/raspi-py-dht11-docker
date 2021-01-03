@@ -3,6 +3,7 @@ version: '3.7'
 x-shared_environment: &shared_environment
   DHT11_PIN_NUMBER: 19
   DHT11_INTERVAL: 5
+  ENPYTHONUNBUFFERED: 0
 
 services:
   app:
