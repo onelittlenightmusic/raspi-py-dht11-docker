@@ -19,7 +19,7 @@ def metrics():
     result = instance.read()
     if result.is_valid():
         dht11_data = f"""temperature{{{tag}}} {result.temperature}
-humidity{{{tag}}}} {result.humidity}"""
+humidity{{{tag}}} {result.humidity}"""
 
     return f"{dht11_data}", 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
