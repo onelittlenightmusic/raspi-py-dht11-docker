@@ -1,6 +1,7 @@
 from flask import Flask
 import dht11
 import RPi.GPIO as GPIO
+import os
 
 GPIO.setwarnings(True)
 GPIO.setmode(GPIO.BCM)
