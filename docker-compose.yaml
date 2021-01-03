@@ -3,7 +3,7 @@ version: '3.7'
 x-shared_environment: &shared_environment
   DHT11_PIN_NUMBER: 19
   DHT11_INTERVAL: 5
-  ENPYTHONUNBUFFERED: 0
+  DHT11_TAG: "sensor_type=dht11,sensor_location=desk"
 
 services:
   app:
