@@ -1,0 +1,17 @@
+version: '3.7'
+
+x-shared_environment: &shared_environment
+  DHT11_PIN_NUMBER: 19
+
+services:
+  app:
+    image: hiroyukiosaki/raspi-py-dht11:latest
+    build:
+      context: .
+    environment:
+      <<: *shared_environment
+    privileged: true
+    command:
+    - /bin/bash
+    - -c
+    - sleep 3600
