@@ -1,7 +1,22 @@
 # Docker container for DHT11
 
+## Usage
 
+```sh
+docker-compose up -d
+# or
+docker run --privileged -d hiroyukiosaki/raspi-py-dht11
+```
 
-# Copyright notice
+## Appendix: Installation of docker-compose on Raspbian
 
-package dht11 = szazo/DHT11_Python: Copyright (c) 2016 Zoltan Szarvas.
+```sh
+sudo apt-get install libffi-dev libssl-dev
+sudo apt install python3-dev
+sudo apt-get install -y python3 python3-pip
+sudo pip3 install docker-compose
+```
+
+## Copyright notice
+
+package dht11: Copyright (c) 2016 Zoltan Szarvas.

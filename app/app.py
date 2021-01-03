@@ -4,24 +4,23 @@ import time
 import datetime
 import os
 
-# initialize GPIO
-GPIO.setwarnings(True)
-GPIO.setmode(GPIO.BCM)
+if __name__ == "__main__":
+	# initialize GPIO
+	GPIO.setwarnings(True)
+	GPIO.setmode(GPIO.BCM)
 
-# read data using pin 14
-pin = os.environ.get('DHT11_PIN_NUMBER')
-instance = dht11.DHT11(pin)
-try:
-	while True:
-	    result = instance.read()
-	    if result.is_valid():
-	        print("Last valid input: " + str(datetime.datetime.now()))
+	pin = int(os.environ.get('DHT11_PIN_NUMBER'))
+	interval = int(os.environ.get('DHT11_INTERVAL'))
+	instance = dht11.DHT11(pin)
+	try:
+		while True:
+			result = instance.read()
+			if result.is_valid():
+				print("Last valid input: " + str(datetime.datetime.now()))
+				print("Temperature: %-3.1f C" % result.temperature)
+				print("Humidity: %-3.1f %%" % result.humidity)
+			time.sleep(interval)
 
-	        print("Temperature: %-3.1f C" % result.temperature)
-	        print("Humidity: %-3.1f %%" % result.humidity)
-
-	    time.sleep(6)
-
-except KeyboardInterrupt:
-    print("Cleanup")
-    GPIO.cleanup()
+	except KeyboardInterrupt:
+		print("Cleanup")
+		GPIO.cleanup()

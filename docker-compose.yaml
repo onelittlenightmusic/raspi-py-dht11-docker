@@ -2,6 +2,7 @@ version: '3.7'
 
 x-shared_environment: &shared_environment
   DHT11_PIN_NUMBER: 19
+  DHT11_INTERVAL: 5
 
 services:
   app:
@@ -11,7 +12,3 @@ services:
     environment:
       <<: *shared_environment
     privileged: true
-    command:
-    - /bin/bash
-    - -c
-    - sleep 3600
