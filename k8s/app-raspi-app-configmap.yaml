@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raspi-app-configmap
+data:
+  DHT11_PIN_NUMBER: "19"
+  DHT11_INTERVAL: "5"
+  DHT11_TAG: "sensor_type=\"dht11\",sensor_location=\"desk\""

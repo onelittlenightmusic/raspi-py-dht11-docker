@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: sensor-app
+    datasource: raspi-desk
+  name: raspi-temp-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sensor-app
+      datasource: raspi-desk  
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: sensor-app
+        datasource: raspi-desk    
+    spec:
+      containers:
+        - envFrom:
+          - configMapRef:
+              name: raspi-app-configmap
+          image: hiroyukiosaki/raspi-py-dht11:latest
+          name: app
+          ports:
+            - containerPort: 5000
+          resources: {}
+          securityContext:
+            privileged: true
+      restartPolicy: Always
+      nodeSelector:
+        raspi-temp: "true"
+        raspi-humid: "true"
+status: {}
