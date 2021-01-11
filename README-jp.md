@@ -1,35 +1,63 @@
-Raspberry Pi (以降ラズパイ) を用いてエッジ向けKubernetesクラスタを構築し、センサデータを収集するエッジ向けアプリをデプロイした。
+# Raspberry Pi 4 (と3B) の上にエッジ向けKubernetesを構築する
+
+Raspberry Pi (以降ラズパイ) を用いてエッジ向けKubernetesクラスタを構築し、センサデータを収集・蓄積・可視化するエッジ向けアプリをデプロイした。
+
+
+| ![image](img/overall.jpg) | ![image](img/iphone.png) |
+|---|---|
+
 
 以降構築方法について、以下の順で説明する。
 
-1. クラスタの特徴・検証環境
-2. ラズパイの準備
-3. Kubernetesのインストール、クラスタ構築
-4. エッジ向けアプリ開発と、クラスタへのデプロイメント
+1. [クラスタの特徴・検証環境](#1-クラスタの特徴構成)
+2. [ラズパイの準備](#2-ラズパイの準備)
+3. [Kubernetesのインストール、クラスタ構築](#3-kubernetesのインストール)
+4. [エッジ向けアプリ開発と、クラスタへのデプロイメント](#4-エッジ向けアプリ開発とデプロイメント)
    - 温度・湿度センサーDHT11の設置
    - センサーからデータ収集・配信するアプリを開発
    - アプリから取得したデータをPrometheusにより収集・蓄積
    - Grafanaによる可視化
-5. テスト
-6. 感想
+5. [テスト](#5-テスト)
+6. [感想](#6-構築検証を終えての感想)
 
 # 1. クラスタの特徴/構成
 
 今回のクラスタの特徴は以下である。
 
-- ノードに**比較的大きなSDカード(128GB/256GB)**を使った。(コンテナイメージが多いと逼迫すると考えたため)
+- ノードに **比較的大きなSDカード(128GB/256GB)** を使った。(コンテナイメージが多いと逼迫すると考えたため)
 - **メモリを潤沢に積んだラズパイ4と非力なラズパイ3の混成**とした。(エッジは非力な装置しか置けない状況が多いと考え、それを再現するため)
 
-## 構成
+
+
+## 構成要素
 
 用意した装置は以下のラズパイ3台とスイッチ1台。なお各ラズパイに電源(5V x 3A程度)が必要。
 
 | 装置 | 構成 |
 |---|---|
-| ラズパイ#1 | コントロールプレーンノード用 <br/>Raspberry Pi 4 Model B<br/>(Memory 8GB)<br/>+ SDカード 128GB (Samsung) |
-| ラズパイ#2 | ワーカーノード用 <br/>Raspberry Pi 4 Model B<br/>(Memory 8GB)<br/>+ SDカード 256GB (Samsung) |
-| ラズパイ#3 (エッジ用) | ワーカーノード用 <br/>Raspberry Pi 3 Model B+<br/>(Memory 1GB)<br/>+ SDカード 32GB (Samsung)<br/>+ 温度・湿度センサーDHT11 |
+| ラズパイ#1 | コントロールプレーンノード <br/>Raspberry Pi 4 Model B<br/>(Memory 8GB)<br/>+ SDカード 128GB (Samsung) |
+| ラズパイ#2 | ワーカーノード <br/>Raspberry Pi 4 Model B<br/>(Memory 8GB)<br/>+ SDカード 256GB (Samsung) |
+| ラズパイ#3 (エッジ用) | ワーカーノード <br/>Raspberry Pi 3 Model B+<br/>(Memory 1GB)<br/>+ SDカード 32GB (Samsung)<br/>+ 温度・湿度センサーDHT11 |
+| ネットワークスイッチ | [NETGEAR 8-Port Gigabit Ethernet Unmanaged Switch (GS308)](https://www.amazon.com/dp/B07PFYM5MZ?psc=1&ref=ppx_pop_dt_b_product_details) |
+| Ethernetケーブル | 1Gbps対応のもの x 3本 |
+| WiFiアクセスポイント(インターネットアクセス用) | 自宅にあったWifiルータを援用 |
 | 端末 | Macbook Pro<br/>OS version: 11.1 Big Sur |
+
+## 接続配線とIPアドレス
+
+- ラズパイとネットワークスイッチをEthernet ケーブルでつなぐ。<br/>
+  なければWifiのみで構築も可能。
+
+```
+[ インターネット ]   [ 端末(Mac) ]
+  |              | 
+[-----Wifi(外部接続用)------]                                 [ Switch(クラスタ内部用) ] 
+192.168.0.1                                                        |
+  ├--(無線)--192.168.0.50--[ RasPi#1 (rp4-1) ]-192.168.1.1--(有線)--┤
+  ├--(無線)--192.168.0.51--[ Raspi#2 (rp4-2) ]-192.168.1.2--(有線)--┤
+  └--(無線)--192.168.0.100-[ Raspi#3 (rp3)   ]-192.168.1.3--(有線)--┘
+```
+
 
 # 2. ラズパイの準備
 
@@ -48,43 +76,57 @@ Raspberry Pi (以降ラズパイ) を用いてエッジ向けKubernetesクラス
 
 ![image.png](img/raspbian.png)
 
-## 2-2. 起動とネットワーク接続
+## 2-2. 起動
 
 - SDカードを挿入してから、ラズパイの電源を入れる。
-  - 最初はディスプレイとキーボード類を接続する
+  - 最初はディスプレイとキーボード類を接続する (そのため一台一台やる必要がある)
   - TTYでのログインは、ユーザ名`pi`, 初期パスワード`raspberry`。
-- (オプション) ネットワークスイッチとEthernet ケーブルをつなぐ。<br/>
-  なければWifiのみで構築も可能。
-
-### 構成図
-
-```
-[ インターネット ]   [ 端末(Mac) ]
-  |               | 
-[ ---Wifi(外部接続用)--- ]                                                          [ Switch(内部接続用) ]           
-  ├---(無線)--192.168.0.50  [ RasPi#1 (コントロールプレーン: rp4-1)  ] 192.168.1.1---(ケーブル)--┤
-  ├---(無線)--192.168.0.51  [ Raspi#2 (ワーカー:         rp4-2)  ] 192.168.1.2---(ケーブル)--┤
-  └---(無線)--192.168.0.100 [ Raspi#3 (ワーカー:         rp3)    ] 192.168.1.3---(ケーブル)--┘
-```
 
 ## 2-3. ラズパイのネットワーク設定
 
 ログイン後に以下コマンドで設定を開始。
 
-`sudo raspi-config`
+- `sudo raspi-config`
 
-変更する内容は以下。
+  変更する内容は以下。
 
-1. *`Hostname`*をラズパイごとに異なる名前にする<br/>
-   (私の場合は*`rp4-1`*, *`rp4-2`*)
-1. SSHを有効化する
-1. IPアドレスを固定する
+  - *`Hostname`*をラズパイごとに異なる名前にする<br/>
+    (私の場合は*`rp4-1`*, *`rp4-2`*)
+  - SSHを有効化する
 
-終了したらhostnameを反映するために再起動します。
+- `sudo vi /etc/dhcpcd.conf`
 
-`sudo reboot`
+  - IPアドレスを固定する。
+
+    ```
+    # クラスタ内部用(有線)
+    interface eth0
+    static ip_address=192.168.1.1/24
+
+    # 外部接続用(Wifi)
+    interface wlan0
+    static ip_address=192.168.0.50/24
+    static routers=192.168.0.1
+    static domain_name_servers=192.168.0.1
+    ```
+
+- `sudo vi /etc/hosts`
+
+  - `/etc/hosts`にクラスタ全ノード分のホスト名を追記しておく。このIPアドレスはクラスタ内で使用されるもの。したがって、スイッチにつながったNICのIPとする。
+
+  ```
+  192.168.1.1 rp4-1
+  192.168.1.2 rp4-2
+  192.168.1.3 rp3
+  ```
+
+- `sudo reboot`
+
+  終了したらhostnameを反映するために再起動します。
 
 ## 2-4. (オプション) ログインの容易化
+
+この節の内容はSSHの都度ログインを楽にするためなので、必須ではない。
 
 - ユーザ`pi`のパスワード変更
   - ユーザ*`pi`*でログイン後、`passwd`コマンドでユーザ*`pi`*のパスワードを変更する (デフォルトパスワードではセキュリティアラートが出る場合がある)
@@ -96,7 +138,7 @@ Raspberry Pi (以降ラズパイ) を用いてエッジ向けKubernetesクラス
 - ログイン直後のWelcomeメッセージを省略する設定
   - 各ノードで以下コマンドを実行し、*`.hushlogin`*ファイルを作成 <br/>
     `touch .hushlogin`
-- 端末の`/etc/hosts`に各ホスト名を登録。
+- 端末の`/etc/hosts`に各ホスト名を登録。このホスト名は外部接続用。
 
 ```
 192.168.0.50 rp4-1
@@ -125,7 +167,7 @@ Host rp3
 - 端末、ノードそれぞれに`tmux`をインストールする (SSHセッションが切れても作業を残すため) <br/>
   `sudo apt update && sudo apt install -y tmux`
 
-## 1-5. Dockerのインストール
+## 2-5. Dockerのインストール
 
 https://docs.docker.com/engine/install/debian/#install-using-the-repository
 
@@ -320,11 +362,19 @@ cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
 deb https://apt.kubernetes.io/ kubernetes-xenial main
 EOF
 sudo apt-get update
+sudo apt-get install -y kubelet=1.19.6-00 kubeadm=1.19.6-00 kubectl=1.19.6-00
+sudo apt-mark hold kubelet kubeadm kubectl
+```
+
+注意）以下のコマンドで導入したkubelet最新版1.20.1を用いると**kube-apiserver,controller-manager,schedulerが平均10分に1回再起動する現象が発生**した。従って、一度上記コマンドにて**バージョン1.19.6**にやり直す必要があった。(この究明に1週間をほどかかった)
+
+【訂正前：不具合発生】
+```
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-# 3-2. コントロールプレーンノードを構築
+## 3-2. コントロールプレーンノードを構築
 
 [kubernetes.io](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)の手順通り実行。
 
@@ -524,10 +574,46 @@ data:
 kubectl apply -f config.yaml
 ```
 
+ここで割り当てるIPアドレスレンジ`192.168.0.70-99`は、無線LANのIPレンジ内の未使用部分を指定した。また、MetalLBはLayer2モードで実行する。
+
+- `promisc`設定
+
+本来であればMetalLBはのレンジ内のIPアドレスをServiceに割り当てたあと、`wlan0`にてARPをブロードキャストしてadvertiseしなければならない。
+
+しかし、ラズパイではNICの設定でそれができないことがある。詳細は[こちら](https://stackoverflow.com/questions/60796696/loadbalancer-using-metallb-on-bare-metal-rpi-cluster-not-working-after-installat)。これによれば、Promiscuous modeでなければならない。
+
+確かに本環境でも、未設定状態では外部からIPアドレスへのアクセスができなかった。
+
+アクセスできるようにするためには、以下の設定を行う。
+
+```
+sudo ifconfig wlan0 promisc
+```
+
+設定後は`ifconfig`の出力で以下のようにPromiscuousモード(`PROMISC`)であることが表示される。
+
+```
+$ ifconfig wlan0
+wlan0: flags=4419<UP,BROADCAST,RUNNING,PROMISC,MULTICAST>  mtu 1500
+```
+
+設定を外す場合(MetalLBを使わなくなった場合等)には以下を実行する。
+
+```
+sudo ifconfig wlan0 -promisc
+```
+
+ただし、これはノードが再起動すると解除される。再起動後も同じ設定にするために、`sudo crontab -e`を実行し、
+
+```
+@reboot sudo ifconfig wlan0 promisc
+```
+
+`crontab: installing new crontab`と表示されれば問題ない。
 
 ## 3-9. クラスタ完成後、ノードの状態の確認
 
-コントロールプレーンノードのメモリは、
+コントロールプレーンノードのメモリは以下。
 
 ```
 $ free -m
@@ -536,7 +622,7 @@ Mem:           7875         476        6706           9         693        7220
 Swap:             0           0           0
 ```
 
-流石に`free`が`6.7GB程度あり、余裕がある。
+搭載メモリ8GBに対して使用量は`476MB`、キャッシュにも使われていない`free`が`6.7GB`程度あり、余裕がある。
 
 ワーカーノードのラズパイ#2は
 
@@ -558,7 +644,7 @@ Mem:            924         181          98          18         644         684
 Swap:             0           0           0
 ```
 
-使用は`181MB`であり、まだ余裕があると思われる。ただし、そもそもバッファとして使用される分が`644MB`であり搭載容量に占める割合が大きい。メモリ逼迫時には性能劣化が起こる可能性が考えられる。
+搭載メモリ1GBに対して使用量は`181MB`であり、まだ余裕があると思われる。ただし、そもそもバッファとして使用される分が`644MB`であり搭載容量に占める割合が大きい。
 
 # 4. エッジ向けアプリ開発とデプロイメント
 
@@ -566,7 +652,9 @@ Swap:             0           0           0
 
 ## 4-1. エッジ用アプリの概要
 
-目的は、温度・湿度センサーの情報をリアルタイムに可視化して、携帯などで確認できること。
+目的は、温度・湿度センサーの情報をリアルタイムに可視化して、携帯などで確認できること(下図参照)
+
+![](2021-01-10-21-14-01.png)
 
 センサデータをパースするアプリ(Pythonで実装)と、収集・蓄積するバックエンド(Prometheus)、可視化するフロントエンド(Grafana)を組み合わせて、システムを構成する。
 
@@ -641,7 +729,7 @@ COPY app/ /usr/src/app/
 CMD ["python", "./app-exporter.py"]
 ```
 
-- コンテナのビルドは以下のコマンドを実行 (`hiroyukiosaki/raspi-py-dht11`はタグ名であり、個々人で変更)
+- コンテナをビルドし、Dockerhubにpushする。以下のコマンドを実行 (`hiroyukiosaki/raspi-py-dht11`はDockerhubに格納するためのタグ名。Dockerhubのユーザ名を取得し変更が必要)
 
 ```sh
 $ docker build . -t hiroyukiosaki/raspi-py-dht11
@@ -650,9 +738,10 @@ $ docker push hiroyukiosaki/raspi-py-dht11
 
 ## 4-4. (Option) テスト用にdocker-composeでアプリ〜Prometheus〜Grafanaを構築
 
-<details><summary>`docker-compose.yaml`を使った構築
+<details><summary>コンテナが正常に稼働するかを確認するテスト. Kubernetesにデプロイする前に、単一ノード上にdocker-compose.yamlを使って構築 (クリックで開く)
 </summary>
 <div>
+
 - `docker-compose.yaml`を以下のように作成。
 
 ```docker-compose.yaml
@@ -721,11 +810,17 @@ $ docker-compose up -d
 
 </details>
 
-## 4-5. Kubernetesへのデプロイ
+## 4-5. Kubernetesへのアプリのデプロイ
 
-### TL;DR
+| ホスト名とポート(KubernetesのService) | コンテナ(KubernetesのPod) |
+|---|---|
+| `raspi-temp-app:5000` | `raspi-temp-app-xxxxxxxxx-xxxxx` (4-2で開発したアプリ) |
+| `raspi-temp-prometheus:9090` | `prometheus-xxxxxxxxx-xxxxx` |
+| `grafana:80` | `grafana-xxxxxxxxx-xxxxx` |
 
-アプリ/Prometheus/Grafanaへのデプロイは以下コマンドだけで完了する。
+### デプロイするためのコマンド
+
+3つのコンテナ(アプリ/Prometheus/Grafana)へのデプロイは以下コマンドで実施する。
 
 ```sh
 git clone https://github.com/onelittlenightmusic/raspi-py-dht11-docker.git
@@ -733,7 +828,7 @@ cd raspi-py-dht11-docker
 kubectl apply -f k8s/
 ```
 
-### デプロイの詳細
+### 4-5-1. クラスタ内でのアプリの配置
 
 ![](img/architecture.png)
 
@@ -741,7 +836,7 @@ kubectl apply -f k8s/
 
 ソフトウェアは、センサ読み取りアプリとPrometheusとGrafanaをそれぞれコンテナで起動する。
 
-ソフトウェアの配置戦略は、
+ソフトウェアの配置戦略は、アプリごとに以下の適切なノードを選択する戦略とする。
 
 | コンテナ | ハード | Kubernetes内のラベル |
 |---|---|---|
@@ -752,10 +847,12 @@ kubectl apply -f k8s/
 
 各コンテナの詳細は以下。
 
-### 4-5-1. センサ読み取りアプリ
+### 4-5-2. センサ読み取りアプリの設定
 
-- `securityContext`により、ラズパイ接続デバイスへのアクセス権を付与
-- `nodeSelector`は`raspi-temp: "true"`と`raspi-humid: "true"`を指定。
+
+- デプロイ時の設定ファイルの内容は以下
+  - `securityContext`により、ラズパイ接続デバイスへのアクセス権を付与
+  - `nodeSelector`は`raspi-temp: "true"`と`raspi-humid: "true"`を指定。
 
 ```app-deployment.yaml
     (ellipsis)
@@ -779,10 +876,11 @@ kubectl apply -f k8s/
 
 全体は[app-deployment.yaml](k8s/app-deployment.yaml)に記載。
 
-### 4-5-2. Prometheus/Grafana
+### 4-5-3. Prometheus/Grafanaの設定
 
-- Prometheusでは、`/prometheus`にデータが保存されるので、ここに用意したPersistentVolumeClaimマウントする。
-- `nodeSelector`は`raspi-temp: "true"`と`raspi-humid: "true"`を指定。
+- デプロイ時の設定ファイルの内容は以下
+  - Prometheusでは、`/prometheus`にデータが保存されるので、ここに用意したPersistentVolumeClaimマウントする。
+  - `nodeSelector`は`raspi-temp: "true"`と`raspi-humid: "true"`を指定。
 
 ```prometheus-deployment.yaml
     spec:
@@ -815,11 +913,19 @@ kubectl apply -f k8s/
         raspi-disk: large
 ```
 
-YAML全体は[grafana-deployment.yaml](k8s/grafana-deployment.yaml)と[prometheus-deployment.yaml](k8s/prometheus-deployment.yaml)に記載。
+設定YAMLは[grafana-deployment.yaml](k8s/grafana-deployment.yaml)と[prometheus-deployment.yaml](k8s/prometheus-deployment.yaml)にある。
 
 ## 4-6. Prometheusによる可視化
 
-ロードバランサが与えたPrometheusのアドレス`http://192.168.0.71:9090`にアクセスする。
+ロードバランサが与えたPrometheusのアドレスを以下で確認し、そのアドレスにアクセスする。
+
+```
+kubectl get svc
+NAME                    TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)          AGE
+raspi-temp-prometheus   LoadBalancer   10.103.205.90    192.168.0.71   9090:31849/TCP   38h
+```
+
+上記の場合のアドレスは`http://192.168.0.71:9090`。
 
 湿度の2分間の移動平均を取得するグラフ
 
@@ -868,6 +974,10 @@ Dashboard追加画面から、
 
 温度変化をデータから観測できるか、直下の暖房を15分間(21:49-22:04)オンにしてテストしてみる。
 
+写真下の円柱が暖房器具。
+
+![image](img/test.jpg)
+
 | 温度 (暖房オンから急速に気温が上昇していることが分かる) | 湿度 (電気ヒーターだからか、特に湿度は大きく変化しなかった) |
 |---|---|
 |![image.png](img/temp.png) | ![image.png](img/humid.png) |
@@ -884,12 +994,15 @@ AndroidからはなぜかIP Unreachableと表示されてしまうため、ス�
 
 # 6. 構築・検証を終えての感想
 
-- ラズパイでKubernetesクラスタを構築するために、2章の`/boot/cmdline.txt`を変更するなどラズパイならではの部分が少し戸惑うところ。しかし、それをクリアすれば通常の`kubeadm`によるKubernetes構築はスムーズ。
+- ラズパイでKubernetesクラスタを構築するために、2章の`/boot/cmdline.txt`を変更するなど**ラズパイならではの部分が少し戸惑う**ところ。しかし、それをクリアすれば通常の`kubeadm`によるKubernetes構築はスムーズ。
 - 今回のエッジアプリはセンサデータをWeb APIで公開するだけの機能を持つ。Prometheus用のデータのフォーマットに変換する実装は、アプリからサイドカーに外出しすれば、アプリのコードがクリーンになり保守性がよくなると考える。(今後の課題)
-- アプリをDockerコンテナ化したことにより、ラズパイ上にPythonライブラリをインストールしなくて済み、エッジにアプリを配布しやすいという効果があった。
+- アプリをDockerコンテナ化したことにより、**ラズパイ上にPythonライブラリをインストールしなくて済み、エッジにアプリを配布しやすい**という効果があった。
 - エッジをKubernetesクラスタに内包した効果
-  - データ読み取りアプリとバックエンドPrometheus間がクラスタ内通信で閉じるので、お互いに物理的なホスト名などを意識せずとも通信可能
-  - エッジと同時にバックエンドをデプロイできるので、システムがスケール容易
+  - データ読み取りアプリとバックエンドPrometheus間がクラスタ内通信で閉じるので、お互いに**物理的なホスト名などを意識せずとも通信可能**
+  - エッジアプリと同時にバックエンドをデプロイできるので、**システムがスケール容易**
   - 今回はラベルと`nodeSelector`を用いたが、この方法ではセンサがどこに接続されているかを把握してラベル付与が必要。おそらくKubeEdgeなどを駆使し、「エッジに接続されたセンサリソースまでKubernetesに登録しスケジューラを活用することで、アプリデプロイ時にアプリが必要とするセンサに合わせノード選択を自動化する」というところまでいけばさらに価値が高そう（今後の課題）
-- Prometheusは時系列データベースというだけでなく、30秒に一回Web APIにアクセスしてくれるスクレイピング機能を有し、メトリクス収集として強力だと感じる。
-- Grafanaも、Prometheusからのシームレスな接続とリアリタイムなレンダリングがあり、時系列データに親和性が高い。
+  - エッジであるはずのノードが物理結線でスイッチに繋がってしまっているのは自由度が低いと感じる。Wifi経由接続でも良かった。(今後の課題)
+- Prometheusは時系列データベースというだけでなく、30秒に一回Web APIにアクセスしてくれるスクレイピング機能を有し、**メトリクス収集として強力**だと感じる。
+- Grafanaも、Prometheusからのシームレスな接続とリアリタイムなレンダリングがあり、**時系列データに親和性が高い**。(今更感がありますが)
+- Kubernetesの接続問題
+  - kubeletおよびkubeadmのバージョンを1.20.1にすると、API server/controller managerなどのKubernetesコンポーネントが頻繁に再起動する事象が起きた。これが発生すると、`kubectl`などが疎通しない。

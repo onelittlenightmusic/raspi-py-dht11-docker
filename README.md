@@ -1,5 +1,7 @@
 # Docker container for DHT11
 
+[日本語ドキュメント(より詳細)](./README-jp.md)
+
 ## Usage
 
 ```sh
